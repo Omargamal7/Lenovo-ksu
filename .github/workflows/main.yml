@@ -1,15 +1,75 @@
-      - name: Harvest patch and build inputs
+name: Extract Lenovo firmware and show core patch inputs
+
+on:
+  workflow_dispatch:
+    inputs:
+      firmware_url:
+        description: Direct firmware ZIP URL
+        required: true
+        type: string
+        default: https://mirrors-obs-1.lolinet.com/firmware/lenowow/2020/Tab_M10_FHD_Plus_2nd_Gen/TB-X606X/TB-X606X_S300673_220613_BMP.zip
+
+permissions:
+  contents: read
+
+jobs:
+  extract-fw:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            unzip \
+            p7zip-full \
+            lz4 \
+            android-sdk-libsparse-utils \
+            file
+
+      - name: Show workspace and free space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Workspace: $GITHUB_WORKSPACE"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Download firmware ZIP to repo root
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
 
-          mkdir -p out/core
+          curl -L --fail --retry 5 --retry-delay 5 \
+            -o firmware.zip \
+            "${{ inputs.firmware_url }}"
+
+          ls -lh firmware.zip
+          unzip -tq firmware.zip
+
+      - name: Extract firmware ZIP into repo root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+          unzip -q firmware.zip
+
+      - name: Harvest core patch metadata only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
           mkdir -p out/meta
           mkdir -p out/unpacked
           mkdir -p out/unpacked/lz4
 
-          # Unpack nested archives
+          # 1) Unpack nested archives
           while IFS= read -r -d '' arc; do
             rel="${arc#./}"
             safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
@@ -34,26 +94,29 @@
               -print0
           )
 
-          # Decompress .lz4 payloads if present
+          # 2) Decompress .lz4 files
           while IFS= read -r -d '' f; do
             rel="${f#./}"
             safe="$(echo "$rel" | sed 's#[/ ]#_#g' | sed 's#\.lz4$##')"
             out_file="out/unpacked/lz4/${safe}"
+            mkdir -p "$(dirname "$out_file")"
             lz4 -d -f "$f" "$out_file" || true
           done < <(
             find . out/unpacked \
               -path './.git' -prune -o \
+              -path './out/unpacked/lz4' -prune -o \
               -type f -iname '*.lz4' -print0
           )
 
-          : > out/meta/found-core.txt
           : > out/meta/core-map.txt
+          : > out/meta/found-core-paths.txt
           : > out/meta/skipped-duplicates.txt
+          : > out/meta/file-types.txt
 
-          copy_core() {
+          record_core() {
             local f="$1"
             local rel="${f#./}"
-            local b lb dst
+            local b lb
 
             b="$(basename "$f")"
             lb="$(echo "$b" | tr '[:upper:]' '[:lower:]')"
@@ -61,43 +124,36 @@
             case "$lb" in
               boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|\
               vbmeta.img|vbmeta_system.img|vbmeta_vendor.img|vbmeta_*.img|\
+              super.img|payload.bin|\
               *scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml)
-                dst="out/core/$b"
-                if [ ! -e "$dst" ]; then
-                  cp -f "$f" "$dst" || true
-                  echo "$b <- $rel" >> out/meta/core-map.txt
-                else
-                  echo "$b duplicate from $rel" >> out/meta/skipped-duplicates.txt
-                fi
-                echo "$rel" >> out/meta/found-core.txt
+                echo "$rel" >> out/meta/found-core-paths.txt
+                echo "$b <- $rel" >> out/meta/core-map.txt
+                file "$f" >> out/meta/file-types.txt || true
                 ;;
             esac
           }
 
           while IFS= read -r -d '' f; do
-            copy_core "$f"
+            record_core "$f"
           done < <(
             find . out/unpacked out/unpacked/lz4 \
               -path './.git' -prune -o \
               -type f -print0
           )
 
-          sort -u out/meta/found-core.txt -o out/meta/found-core.txt || true
+          sort -u out/meta/found-core-paths.txt -o out/meta/found-core-paths.txt || true
           sort -u out/meta/core-map.txt -o out/meta/core-map.txt || true
-          sort -u out/meta/skipped-duplicates.txt -o out/meta/skipped-duplicates.txt || true
+          sort -u out/meta/file-types.txt -o out/meta/file-types.txt || true
 
           {
-            echo "=== CORE FILES ==="
-            ls -lah out/core || true
-            echo
-            echo "=== CORE MAP ==="
+            echo "=== CORE PATCH INPUTS FOUND ==="
             cat out/meta/core-map.txt || true
             echo
-            echo "=== FOUND CORE PATHS ==="
-            cat out/meta/found-core.txt || true
+            echo "=== FILE TYPES ==="
+            cat out/meta/file-types.txt || true
             echo
-            echo "=== DUPLICATES ==="
-            cat out/meta/skipped-duplicates.txt || true
+            echo "=== FOUND CORE PATHS ==="
+            cat out/meta/found-core-paths.txt || true
           } | tee out/meta/summary.txt
 
       - name: Show summary on Actions page
