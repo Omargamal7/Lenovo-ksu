@@ -1,4 +1,4 @@
-name: Extract Lenovo firmware to repo root
+name: Extract Lenovo firmware and harvest patch inputs
 
 on:
   workflow_dispatch:
@@ -19,6 +19,18 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      - name: Install extraction tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            unzip \
+            p7zip-full \
+            lz4 \
+            android-sdk-libsparse-utils \
+            file
 
       - name: Show workspace and free space
         shell: bash
@@ -45,31 +57,98 @@ jobs:
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
-
           unzip -q firmware.zip
 
-          echo "Top-level files after extraction:"
-          find "$GITHUB_WORKSPACE" -maxdepth 2 -mindepth 1 \
-            | sed "s|$GITHUB_WORKSPACE/||" \
-            | sort \
-            | head -300
-
-      - name: Save extraction manifest
+      - name: Harvest patch/build inputs
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
 
-          {
-            echo "# Extracted tree"
-            echo
-            find . -maxdepth 4 | sort
-          } > extracted-tree.txt
+          mkdir -p out/patch-inputs
+          mkdir -p out/meta
+          mkdir -p out/unpacked
 
-      - name: Upload extraction manifest
+          # Unpack nested archives
+          while IFS= read -r -d '' arc; do
+            rel="${arc#./}"
+            safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
+            dest="out/unpacked/${safe}"
+            mkdir -p "$dest"
+
+            case "${arc,,}" in
+              *.zip)
+                unzip -oq "$arc" -d "$dest" || true
+                ;;
+              *.7z|*.rar|*.tar|*.tgz|*.tar.gz|*.md5)
+                7z x -y "-o$dest" "$arc" || true
+                ;;
+            esac
+          done < <(
+            find . \
+              -path './.git' -prune -o \
+              -path './out' -prune -o \
+              -type f \
+              \( -iname '*.zip' -o -iname '*.7z' -o -iname '*.rar' -o -iname '*.tar' -o -iname '*.tgz' -o -iname '*.tar.gz' -o -iname '*.md5' \) \
+              ! -name 'firmware.zip' \
+              -print0
+          )
+
+          : > out/meta/found-files.txt
+
+          copy_match() {
+            local f="$1"
+            local b
+            b="$(basename "$f")"
+            lb="$(echo "$b" | tr '[:upper:]' '[:lower:]')"
+
+            case "$lb" in
+              boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|super.img|payload.bin|vbmeta.img|vbmeta_*.img|vbmeta_system.img|vbmeta_vendor.img|dtb.img|dtb.bin|lk.bin|logo.bin|preloader*.bin|*scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml)
+                cp -f "$f" "out/patch-inputs/$b" || true
+                echo "$f" >> out/meta/found-files.txt
+                ;;
+            esac
+          }
+
+          while IFS= read -r -d '' f; do
+            copy_match "$f"
+          done < <(
+            find . out/unpacked \
+              -path './.git' -prune -o \
+              -type f -print0
+          )
+
+          sort -u out/meta/found-files.txt -o out/meta/found-files.txt
+
+          : > out/meta/sparse-converted.txt
+          shopt -s nullglob
+          for img in out/patch-inputs/*.img; do
+            if file "$img" | grep -qi 'Android sparse image'; then
+              raw="${img%.img}.raw.img"
+              simg2img "$img" "$raw" || true
+              if [ -f "$raw" ]; then
+                echo "$(basename "$img") -> $(basename "$raw")" >> out/meta/sparse-converted.txt
+              fi
+            fi
+          done
+
+          {
+            echo "=== PATCH INPUTS ==="
+            ls -lah out/patch-inputs || true
+            echo
+            echo "=== FOUND FILES ==="
+            cat out/meta/found-files.txt || true
+            echo
+            echo "=== SPARSE CONVERSIONS ==="
+            cat out/meta/sparse-converted.txt || true
+          } | tee out/meta/summary.txt
+
+      - name: Upload extracted patch inputs
         uses: actions/upload-artifact@v4
         with:
-          name: fw-extracted-tree
-          path: extracted-tree.txt
+          name: patch-inputs
+          path: |
+            out/patch-inputs
+            out/meta
           if-no-files-found: error
           retention-days: 7
