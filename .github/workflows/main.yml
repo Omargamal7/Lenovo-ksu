@@ -1,4 +1,4 @@
-       name: Install image inspection tools
+      - name: Install image inspection tools
         shell: bash
         run: |
           set -euxo pipefail
