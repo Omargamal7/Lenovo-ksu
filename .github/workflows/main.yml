@@ -1,0 +1,75 @@
+name: Extract Lenovo firmware to repo root
+
+on:
+  workflow_dispatch:
+    inputs:
+      firmware_url:
+        description: Direct firmware ZIP URL
+        required: true
+        type: string
+        default: https://mirrors-obs-1.lolinet.com/firmware/lenowow/2020/Tab_M10_FHD_Plus_2nd_Gen/TB-X606X/TB-X606X_S300673_220613_BMP.zip
+
+permissions:
+  contents: read
+
+jobs:
+  extract-fw:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Show workspace and free space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Workspace: $GITHUB_WORKSPACE"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Download firmware ZIP to repo root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          curl -L --fail --retry 5 --retry-delay 5 \
+            -o firmware.zip \
+            "${{ inputs.firmware_url }}"
+
+          ls -lh firmware.zip
+          unzip -tq firmware.zip
+
+      - name: Extract firmware ZIP into repo root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          unzip -q firmware.zip
+
+          echo "Top-level files after extraction:"
+          find "$GITHUB_WORKSPACE" -maxdepth 2 -mindepth 1 \
+            | sed "s|$GITHUB_WORKSPACE/||" \
+            | sort \
+            | head -300
+
+      - name: Save extraction manifest
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          {
+            echo "# Extracted tree"
+            echo
+            find . -maxdepth 4 | sort
+          } > extracted-tree.txt
+
+      - name: Upload extraction manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: fw-extracted-tree
+          path: extracted-tree.txt
+          if-no-files-found: error
+          retention-days: 7
