@@ -1,0 +1,61 @@
+      - name: Install image inspection tools
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y python3 python3-pip
+          python3 -m pip install --break-system-packages --upgrade pip
+          python3 -m pip install --break-system-packages android-tools
+
+      - name: Inspect boot, recovery, vbmeta, and scatter
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          mkdir -p out/inspect
+          mkdir -p out/core
+
+          cp -f boot.img out/core/ || true
+          cp -f recovery.img out/core/ || true
+          cp -f vbmeta.img out/core/ || true
+          cp -f MT6765_Android_scatter.txt out/core/ || true
+
+          {
+            echo "=== FILE INFO ==="
+            file boot.img recovery.img vbmeta.img MT6765_Android_scatter.txt || true
+            echo
+            echo "=== BOOT HEADER STRINGS ==="
+            strings -a boot.img | head -200 || true
+            echo
+            echo "=== RECOVERY HEADER STRINGS ==="
+            strings -a recovery.img | head -200 || true
+            echo
+            echo "=== VBMETA STRINGS ==="
+            strings -a vbmeta.img | head -200 || true
+            echo
+            echo "=== SCATTER TOP ==="
+            sed -n '1,220p' MT6765_Android_scatter.txt || true
+          } | tee out/inspect/summary.txt
+
+      - name: Show inspection summary on Actions page
+        shell: bash
+        run: |
+          {
+            echo "## Lenovo core image inspection"
+            echo
+            echo '```text'
+            sed -n '1,400p' out/inspect/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload only core files
+        uses: actions/upload-artifact@v6
+        with:
+          name: core-images
+          path: |
+            out/core
+            out/inspect
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
