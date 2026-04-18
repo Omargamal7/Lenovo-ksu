@@ -1,77 +1,15 @@
-name: Extract Lenovo firmware and harvest patch inputs
-
-on:
-  workflow_dispatch:
-    inputs:
-      firmware_url:
-        description: Direct firmware ZIP URL
-        required: true
-        type: string
-        default: https://mirrors-obs-1.lolinet.com/firmware/lenowow/2020/Tab_M10_FHD_Plus_2nd_Gen/TB-X606X/TB-X606X_S300673_220613_BMP.zip
-
-permissions:
-  contents: read
-
-jobs:
-  extract-fw:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v6
-
-      - name: Install extraction tools
-        shell: bash
-        run: |
-          set -euxo pipefail
-          sudo apt-get update
-          sudo apt-get install -y \
-            unzip \
-            p7zip-full \
-            lz4 \
-            android-sdk-libsparse-utils \
-            file
-
-      - name: Show workspace and free space
-        shell: bash
-        run: |
-          set -euxo pipefail
-          echo "Workspace: $GITHUB_WORKSPACE"
-          df -h "$GITHUB_WORKSPACE"
-
-      - name: Download firmware ZIP to repo root
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-
-          curl -L --fail --retry 5 --retry-delay 5 \
-            -o firmware.zip \
-            "${{ inputs.firmware_url }}"
-
-          ls -lh firmware.zip
-          unzip -tq firmware.zip
-
-      - name: Extract firmware ZIP into repo root
-        shell: bash
-        run: |
-          set -euxo pipefail
-          cd "$GITHUB_WORKSPACE"
-          unzip -q firmware.zip
-
       - name: Harvest patch and build inputs
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
 
-          mkdir -p out/patch-inputs/by-name
-          mkdir -p out/patch-inputs/by-path
+          mkdir -p out/core
           mkdir -p out/meta
           mkdir -p out/unpacked
           mkdir -p out/unpacked/lz4
 
-          # 1) Unpack nested archives found after root extraction
+          # Unpack nested archives
           while IFS= read -r -d '' arc; do
             rel="${arc#./}"
             safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
@@ -96,7 +34,7 @@ jobs:
               -print0
           )
 
-          # 2) Decompress any .img.lz4 files we find
+          # Decompress .lz4 payloads if present
           while IFS= read -r -d '' f; do
             rel="${f#./}"
             safe="$(echo "$rel" | sed 's#[/ ]#_#g' | sed 's#\.lz4$##')"
@@ -108,99 +46,76 @@ jobs:
               -type f -iname '*.lz4' -print0
           )
 
-          : > out/meta/found-files.txt
-          : > out/meta/by-name-map.txt
+          : > out/meta/found-core.txt
+          : > out/meta/core-map.txt
           : > out/meta/skipped-duplicates.txt
 
-          store_match() {
+          copy_core() {
             local f="$1"
             local rel="${f#./}"
-            local b lb safe dest_by_path dest_by_name
+            local b lb dst
 
             b="$(basename "$f")"
             lb="$(echo "$b" | tr '[:upper:]' '[:lower:]')"
-            safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
 
             case "$lb" in
-              boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|super.img|payload.bin|\
-              vbmeta.img|vbmeta_*.img|vbmeta_system.img|vbmeta_vendor.img|\
-              system.img|vendor.img|product.img|odm.img|system_ext.img|vendor_dlkm.img|metadata.img|\
-              dtb.img|dtb.bin|lk.bin|logo.bin|preloader*.bin|\
-              *scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml|vendor_boot-debug.img)
-                dest_by_path="out/patch-inputs/by-path/${safe}"
-                cp -f "$f" "$dest_by_path" || true
-                echo "$rel" >> out/meta/found-files.txt
-
-                dest_by_name="out/patch-inputs/by-name/$b"
-                if [ ! -e "$dest_by_name" ]; then
-                  cp -f "$f" "$dest_by_name" || true
-                  echo "$b <- $rel" >> out/meta/by-name-map.txt
+              boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|\
+              vbmeta.img|vbmeta_system.img|vbmeta_vendor.img|vbmeta_*.img|\
+              *scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml)
+                dst="out/core/$b"
+                if [ ! -e "$dst" ]; then
+                  cp -f "$f" "$dst" || true
+                  echo "$b <- $rel" >> out/meta/core-map.txt
                 else
                   echo "$b duplicate from $rel" >> out/meta/skipped-duplicates.txt
                 fi
+                echo "$rel" >> out/meta/found-core.txt
                 ;;
             esac
           }
 
-          # 3) Scan everything extracted/unpacked/decompressed
           while IFS= read -r -d '' f; do
-            store_match "$f"
+            copy_core "$f"
           done < <(
             find . out/unpacked out/unpacked/lz4 \
               -path './.git' -prune -o \
               -type f -print0
           )
 
-          sort -u out/meta/found-files.txt -o out/meta/found-files.txt
-          sort -u out/meta/by-name-map.txt -o out/meta/by-name-map.txt || true
+          sort -u out/meta/found-core.txt -o out/meta/found-core.txt || true
+          sort -u out/meta/core-map.txt -o out/meta/core-map.txt || true
           sort -u out/meta/skipped-duplicates.txt -o out/meta/skipped-duplicates.txt || true
 
-          # 4) Convert sparse images to raw when safe/useful
-          : > out/meta/sparse-converted.txt
-          shopt -s nullglob
-          for img in out/patch-inputs/by-name/*.img; do
-            base="$(basename "$img")"
-
-            case "$base" in
-              super.img)
-                echo "Skipped sparse conversion for $base" >> out/meta/sparse-converted.txt
-                continue
-                ;;
-            esac
-
-            if file "$img" | grep -qi 'Android sparse image'; then
-              raw="${img%.img}.raw.img"
-              simg2img "$img" "$raw" || true
-              if [ -f "$raw" ]; then
-                echo "$base -> $(basename "$raw")" >> out/meta/sparse-converted.txt
-              fi
-            fi
-          done
-
-          # 5) Summary
           {
-            echo "=== BY-NAME PATCH INPUTS ==="
-            ls -lah out/patch-inputs/by-name || true
+            echo "=== CORE FILES ==="
+            ls -lah out/core || true
             echo
-            echo "=== FOUND FILES ==="
-            cat out/meta/found-files.txt || true
+            echo "=== CORE MAP ==="
+            cat out/meta/core-map.txt || true
             echo
-            echo "=== BY-NAME MAP ==="
-            cat out/meta/by-name-map.txt || true
+            echo "=== FOUND CORE PATHS ==="
+            cat out/meta/found-core.txt || true
             echo
-            echo "=== DUPLICATES SKIPPED FOR BY-NAME ==="
+            echo "=== DUPLICATES ==="
             cat out/meta/skipped-duplicates.txt || true
-            echo
-            echo "=== SPARSE CONVERSIONS ==="
-            cat out/meta/sparse-converted.txt || true
           } | tee out/meta/summary.txt
 
-      - name: Upload extracted patch inputs
+      - name: Show summary on Actions page
+        shell: bash
+        run: |
+          {
+            echo "## Lenovo firmware core patch inputs"
+            echo
+            echo '```text'
+            cat out/meta/summary.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload tiny report only
         uses: actions/upload-artifact@v6
         with:
-          name: patch-inputs
-          path: |
-            out/patch-inputs
-            out/meta
+          name: patch-report
+          path: out/meta
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 3
+          compression-level: 9
