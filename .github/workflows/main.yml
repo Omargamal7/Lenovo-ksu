@@ -1,11 +1,160 @@
-      - name: Install image inspection tools
+name: Extract Lenovo firmware and inspect core patch inputs
+
+on:
+  workflow_dispatch:
+    inputs:
+      firmware_url:
+        description: Direct firmware ZIP URL
+        required: true
+        type: string
+        default: https://mirrors-obs-1.lolinet.com/firmware/lenowow/2020/Tab_M10_FHD_Plus_2nd_Gen/TB-X606X/TB-X606X_S300673_220613_BMP.zip
+
+permissions:
+  contents: read
+
+jobs:
+  extract-fw:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+
+      - name: Install extraction tools
         shell: bash
         run: |
           set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip
-          python3 -m pip install --break-system-packages --upgrade pip
-          python3 -m pip install --break-system-packages android-tools
+          sudo apt-get install -y \
+            unzip \
+            p7zip-full \
+            lz4 \
+            android-sdk-libsparse-utils \
+            file \
+            binutils
+
+      - name: Show workspace and free space
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo "Workspace: $GITHUB_WORKSPACE"
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Download firmware ZIP to repo root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          curl -L --fail --retry 5 --retry-delay 5 \
+            -o firmware.zip \
+            "${{ inputs.firmware_url }}"
+
+          ls -lh firmware.zip
+          unzip -tq firmware.zip
+
+      - name: Extract firmware ZIP into repo root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+          unzip -q firmware.zip
+
+      - name: Harvest core patch metadata only
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd "$GITHUB_WORKSPACE"
+
+          mkdir -p out/meta
+          mkdir -p out/unpacked
+          mkdir -p out/unpacked/lz4
+
+          # Unpack nested archives
+          while IFS= read -r -d '' arc; do
+            rel="${arc#./}"
+            safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
+            dest="out/unpacked/${safe}"
+            mkdir -p "$dest"
+
+            case "${arc,,}" in
+              *.zip)
+                unzip -oq "$arc" -d "$dest" || true
+                ;;
+              *.7z|*.rar|*.tar|*.tgz|*.tar.gz|*.md5)
+                7z x -y "-o$dest" "$arc" || true
+                ;;
+            esac
+          done < <(
+            find . \
+              -path './.git' -prune -o \
+              -path './out' -prune -o \
+              -type f \
+              \( -iname '*.zip' -o -iname '*.7z' -o -iname '*.rar' -o -iname '*.tar' -o -iname '*.tgz' -o -iname '*.tar.gz' -o -iname '*.md5' \) \
+              ! -name 'firmware.zip' \
+              -print0
+          )
+
+          # Decompress .lz4 files if any exist
+          while IFS= read -r -d '' f; do
+            rel="${f#./}"
+            safe="$(echo "$rel" | sed 's#[/ ]#_#g' | sed 's#\.lz4$##')"
+            out_file="out/unpacked/lz4/${safe}"
+            mkdir -p "$(dirname "$out_file")"
+            lz4 -d -f "$f" "$out_file" || true
+          done < <(
+            find . out/unpacked \
+              -path './.git' -prune -o \
+              -path './out/unpacked/lz4' -prune -o \
+              -type f -iname '*.lz4' -print0
+          )
+
+          : > out/meta/core-map.txt
+          : > out/meta/found-core-paths.txt
+          : > out/meta/file-types.txt
+
+          record_core() {
+            local f="$1"
+            local rel="${f#./}"
+            local b lb
+
+            b="$(basename "$f")"
+            lb="$(echo "$b" | tr '[:upper:]' '[:lower:]')"
+
+            case "$lb" in
+              boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|\
+              vbmeta.img|vbmeta_system.img|vbmeta_vendor.img|vbmeta_*.img|\
+              super.img|payload.bin|\
+              *scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml)
+                echo "$rel" >> out/meta/found-core-paths.txt
+                echo "$b <- $rel" >> out/meta/core-map.txt
+                file "$f" >> out/meta/file-types.txt || true
+                ;;
+            esac
+          }
+
+          while IFS= read -r -d '' f; do
+            record_core "$f"
+          done < <(
+            find . out/unpacked out/unpacked/lz4 \
+              -path './.git' -prune -o \
+              -type f -print0
+          )
+
+          sort -u out/meta/found-core-paths.txt -o out/meta/found-core-paths.txt || true
+          sort -u out/meta/core-map.txt -o out/meta/core-map.txt || true
+          sort -u out/meta/file-types.txt -o out/meta/file-types.txt || true
+
+          {
+            echo "=== CORE PATCH INPUTS FOUND ==="
+            cat out/meta/core-map.txt || true
+            echo
+            echo "=== FILE TYPES ==="
+            cat out/meta/file-types.txt || true
+            echo
+            echo "=== FOUND CORE PATHS ==="
+            cat out/meta/found-core-paths.txt || true
+          } | tee out/meta/summary.txt
 
       - name: Inspect boot, recovery, vbmeta, and scatter
         shell: bash
@@ -14,48 +163,59 @@
           cd "$GITHUB_WORKSPACE"
 
           mkdir -p out/inspect
-          mkdir -p out/core
-
-          cp -f boot.img out/core/ || true
-          cp -f recovery.img out/core/ || true
-          cp -f vbmeta.img out/core/ || true
-          cp -f MT6765_Android_scatter.txt out/core/ || true
 
           {
             echo "=== FILE INFO ==="
-            file boot.img recovery.img vbmeta.img MT6765_Android_scatter.txt || true
+            [ -f boot.img ] && file boot.img || true
+            [ -f recovery.img ] && file recovery.img || true
+            [ -f vbmeta.img ] && file vbmeta.img || true
+            [ -f MT6765_Android_scatter.txt ] && file MT6765_Android_scatter.txt || true
             echo
-            echo "=== BOOT HEADER STRINGS ==="
-            strings -a boot.img | head -200 || true
+
+            echo "=== BOOT STRINGS (first 200 lines) ==="
+            [ -f boot.img ] && strings -a boot.img | sed -n '1,200p' || true
             echo
-            echo "=== RECOVERY HEADER STRINGS ==="
-            strings -a recovery.img | head -200 || true
+
+            echo "=== RECOVERY STRINGS (first 200 lines) ==="
+            [ -f recovery.img ] && strings -a recovery.img | sed -n '1,200p' || true
             echo
-            echo "=== VBMETA STRINGS ==="
-            strings -a vbmeta.img | head -200 || true
+
+            echo "=== VBMETA STRINGS (first 200 lines) ==="
+            [ -f vbmeta.img ] && strings -a vbmeta.img | sed -n '1,200p' || true
             echo
-            echo "=== SCATTER TOP ==="
-            sed -n '1,220p' MT6765_Android_scatter.txt || true
+
+            echo "=== SCATTER TOP (first 220 lines) ==="
+            [ -f MT6765_Android_scatter.txt ] && sed -n '1,220p' MT6765_Android_scatter.txt || true
+            echo
+
+            echo "=== SCATTER PARTITION NAMES ==="
+            [ -f MT6765_Android_scatter.txt ] && grep -nE 'partition_name:|file_name:|linear_start_addr:|physical_start_addr:|partition_size:' MT6765_Android_scatter.txt || true
           } | tee out/inspect/summary.txt
 
-      - name: Show inspection summary on Actions page
+      - name: Show summary on Actions page
         shell: bash
         run: |
           {
-            echo "## Lenovo core image inspection"
+            echo "## Lenovo firmware core patch inputs"
+            echo
+            echo '```text'
+            cat out/meta/summary.txt
+            echo '```'
+            echo
+            echo "## Image inspection"
             echo
             echo '```text'
             sed -n '1,400p' out/inspect/summary.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload only core files
+      - name: Upload tiny report only
         uses: actions/upload-artifact@v6
         with:
-          name: core-images
+          name: patch-report
           path: |
-            out/core
+            out/meta
             out/inspect
           if-no-files-found: error
           retention-days: 3
-          compression-level: 0
+          compression-level: 9
