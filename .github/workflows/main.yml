@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install extraction tools
         shell: bash
@@ -59,17 +59,19 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           unzip -q firmware.zip
 
-      - name: Harvest patch/build inputs
+      - name: Harvest patch and build inputs
         shell: bash
         run: |
           set -euxo pipefail
           cd "$GITHUB_WORKSPACE"
 
-          mkdir -p out/patch-inputs
+          mkdir -p out/patch-inputs/by-name
+          mkdir -p out/patch-inputs/by-path
           mkdir -p out/meta
           mkdir -p out/unpacked
+          mkdir -p out/unpacked/lz4
 
-          # Unpack nested archives
+          # 1) Unpack nested archives found after root extraction
           while IFS= read -r -d '' arc; do
             rel="${arc#./}"
             safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
@@ -94,57 +96,107 @@ jobs:
               -print0
           )
 
-          : > out/meta/found-files.txt
+          # 2) Decompress any .img.lz4 files we find
+          while IFS= read -r -d '' f; do
+            rel="${f#./}"
+            safe="$(echo "$rel" | sed 's#[/ ]#_#g' | sed 's#\.lz4$##')"
+            out_file="out/unpacked/lz4/${safe}"
+            lz4 -d -f "$f" "$out_file" || true
+          done < <(
+            find . out/unpacked \
+              -path './.git' -prune -o \
+              -type f -iname '*.lz4' -print0
+          )
 
-          copy_match() {
+          : > out/meta/found-files.txt
+          : > out/meta/by-name-map.txt
+          : > out/meta/skipped-duplicates.txt
+
+          store_match() {
             local f="$1"
-            local b
+            local rel="${f#./}"
+            local b lb safe dest_by_path dest_by_name
+
             b="$(basename "$f")"
             lb="$(echo "$b" | tr '[:upper:]' '[:lower:]')"
+            safe="$(echo "$rel" | sed 's#[/ ]#_#g')"
 
             case "$lb" in
-              boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|super.img|payload.bin|vbmeta.img|vbmeta_*.img|vbmeta_system.img|vbmeta_vendor.img|dtb.img|dtb.bin|lk.bin|logo.bin|preloader*.bin|*scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml)
-                cp -f "$f" "out/patch-inputs/$b" || true
-                echo "$f" >> out/meta/found-files.txt
+              boot.img|recovery.img|vendor_boot.img|init_boot.img|dtbo.img|super.img|payload.bin|\
+              vbmeta.img|vbmeta_*.img|vbmeta_system.img|vbmeta_vendor.img|\
+              system.img|vendor.img|product.img|odm.img|system_ext.img|vendor_dlkm.img|metadata.img|\
+              dtb.img|dtb.bin|lk.bin|logo.bin|preloader*.bin|\
+              *scatter*.txt|mt*.txt|rawprogram*.xml|flash*.xml|vendor_boot-debug.img)
+                dest_by_path="out/patch-inputs/by-path/${safe}"
+                cp -f "$f" "$dest_by_path" || true
+                echo "$rel" >> out/meta/found-files.txt
+
+                dest_by_name="out/patch-inputs/by-name/$b"
+                if [ ! -e "$dest_by_name" ]; then
+                  cp -f "$f" "$dest_by_name" || true
+                  echo "$b <- $rel" >> out/meta/by-name-map.txt
+                else
+                  echo "$b duplicate from $rel" >> out/meta/skipped-duplicates.txt
+                fi
                 ;;
             esac
           }
 
+          # 3) Scan everything extracted/unpacked/decompressed
           while IFS= read -r -d '' f; do
-            copy_match "$f"
+            store_match "$f"
           done < <(
-            find . out/unpacked \
+            find . out/unpacked out/unpacked/lz4 \
               -path './.git' -prune -o \
               -type f -print0
           )
 
           sort -u out/meta/found-files.txt -o out/meta/found-files.txt
+          sort -u out/meta/by-name-map.txt -o out/meta/by-name-map.txt || true
+          sort -u out/meta/skipped-duplicates.txt -o out/meta/skipped-duplicates.txt || true
 
+          # 4) Convert sparse images to raw when safe/useful
           : > out/meta/sparse-converted.txt
           shopt -s nullglob
-          for img in out/patch-inputs/*.img; do
+          for img in out/patch-inputs/by-name/*.img; do
+            base="$(basename "$img")"
+
+            case "$base" in
+              super.img)
+                echo "Skipped sparse conversion for $base" >> out/meta/sparse-converted.txt
+                continue
+                ;;
+            esac
+
             if file "$img" | grep -qi 'Android sparse image'; then
               raw="${img%.img}.raw.img"
               simg2img "$img" "$raw" || true
               if [ -f "$raw" ]; then
-                echo "$(basename "$img") -> $(basename "$raw")" >> out/meta/sparse-converted.txt
+                echo "$base -> $(basename "$raw")" >> out/meta/sparse-converted.txt
               fi
             fi
           done
 
+          # 5) Summary
           {
-            echo "=== PATCH INPUTS ==="
-            ls -lah out/patch-inputs || true
+            echo "=== BY-NAME PATCH INPUTS ==="
+            ls -lah out/patch-inputs/by-name || true
             echo
             echo "=== FOUND FILES ==="
             cat out/meta/found-files.txt || true
+            echo
+            echo "=== BY-NAME MAP ==="
+            cat out/meta/by-name-map.txt || true
+            echo
+            echo "=== DUPLICATES SKIPPED FOR BY-NAME ==="
+            cat out/meta/skipped-duplicates.txt || true
             echo
             echo "=== SPARSE CONVERSIONS ==="
             cat out/meta/sparse-converted.txt || true
           } | tee out/meta/summary.txt
 
       - name: Upload extracted patch inputs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: patch-inputs
           path: |
