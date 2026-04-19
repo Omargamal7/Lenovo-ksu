@@ -70,16 +70,28 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
-          # Nuclear fix for -Werror in legacy source (Intelligent transformation)
-          find . -name "Makefile" -type f -exec sed -i 's/-Werror-/-W/g' {} +
-          find . -name "Makefile" -type f -exec sed -i 's/-Werror/-Wno-error/g' {} +
+          # Robust fix for -Werror using Python
+          python3 -c "
+import os, re
+for root, dirs, files in os.walk('.'):
+    for file in files:
+        if file == 'Makefile' or file.endswith('.mk'):
+            path = os.path.join(root, file)
+            with open(path, 'r', errors='ignore') as f:
+                content = f.read()
+            # Remove -Werror and any attached assignments, but keep trailing parentheses
+            new_content = re.sub(r'-Werror[^\s)]*', '', content)
+            if content != new_content:
+                with open(path, 'w') as f:
+                    f.write(new_content)
+"
           
           make achilles6_row_defconfig
-          # Building with GCC and basic standard suppression flags
+          # Building with GCC and minimal stable suppression flags
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon" \
             HOSTCXXFLAGS="-fcommon" \
-            KCFLAGS="-Wno-implicit-function-declaration -Wno-implicit-int -Wno-error" \
+            KCFLAGS="-Wno-error" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb
           
