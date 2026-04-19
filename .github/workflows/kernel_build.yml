@@ -71,7 +71,7 @@ jobs:
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
           # Forward declaration to fix implicit declaration error
-          sed -i '/#include "sched.h"/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
+          sed -i '/#include .*sched.h.*/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
 
           make achilles6_row_defconfig
 
@@ -85,7 +85,8 @@ jobs:
               -Wno-error=incompatible-pointer-types \
               -Wno-error=int-conversion \
               -Wno-error=array-bounds \
-              -Wno-error=array-compare" \
+              -Wno-error=array-compare \
+              -Wno-error=dangling-pointer" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb || { \
               rc=$?; \
