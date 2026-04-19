@@ -80,6 +80,7 @@ jobs:
           
           # Building with professional Kbuild flags as recommended
           # Adding -w to suppress all warnings and focus on REAL errors
+          # Search for NOHZ_BALANCE_KICK and forced -Werror
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
@@ -92,7 +93,7 @@ jobs:
               -Wno-error=stringop-truncation \
               -Wno-error=address-of-packed-member" \
             KCPPFLAGS="-Wno-error" \
-            Image.gz-dtb || (echo "Compilation failed, inspecting source..." && grep -C 5 "NOHZ_BALANCE_KICK" kernel/sched/core.c && exit 1)
+            Image.gz-dtb || (echo "Compilation failed. Hunting for NOHZ_BALANCE_KICK..." && grep -r "NOHZ_BALANCE_KICK" . | head -n 20 && echo "Hunting for forced -Werror..." && grep -r "\-Werror" . --include="Makefile" --include="*.mk" | grep -v "Wno-error" | head -n 20 && exit 1)
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
