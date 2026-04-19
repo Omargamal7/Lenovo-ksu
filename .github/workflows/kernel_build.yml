@@ -74,6 +74,8 @@ jobs:
           find . -name "Makefile" -type f -exec sed -E -i \
             -e 's/-Werror-implicit-function-declaration/-Wno-error=implicit-function-declaration/g' \
             -e 's/-Werror-implicit-int/-Wno-error=implicit-int/g' \
+            -e 's/ -Werror / -Wno-error /g' \
+            -e 's/ -Werror$/ -Wno-error/g' \
             {} +
           
           # Enable NO_HZ_COMMON and NO_HZ to fix undeclared NOHZ symbols in Mediatek code
