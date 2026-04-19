@@ -71,8 +71,8 @@ jobs:
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
           # Forward declaration to fix implicit declaration error
-          grep -q 'extern int find_best_idle_cpu(struct task_struct \*p, bool prefer_idle);' kernel/sched/eas_plus.c || \
-          sed -i '/#include "sched.h"/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
+          grep -q 'extern int find_best_idle_cpu' kernel/sched/eas_plus.c || \
+          sed -i '/#include <linux\/sched.h>/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
 
           # Feature-gate fixes for NOHZ and HRTIMERS
           echo "CONFIG_NO_HZ_IDLE=y" >> arch/arm64/configs/achilles6_row_defconfig
