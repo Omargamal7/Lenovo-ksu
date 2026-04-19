@@ -69,10 +69,6 @@ jobs:
           # Fix for missing dtbo_check
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
-          
-          # Forward declaration to fix implicit declaration error
-          grep -q 'extern int find_best_idle_cpu' kernel/sched/eas_plus.c || \
-          sed -i '/static int is_tiny_task/i extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
 
           # Feature-gate fixes for NOHZ and HRTIMERS
           echo "CONFIG_NO_HZ_IDLE=y" >> arch/arm64/configs/achilles6_row_defconfig
@@ -107,6 +103,8 @@ jobs:
               grep -nC 3 -E 'NOHZ_BALANCE_KICK|nohz_flags' kernel/sched/sched.h kernel/sched/core.c kernel/sched/fair.c || true; \
               echo "--- HRTIMER defs/usages ---"; \
               grep -nC 3 -E 'hang_detected|struct hrtimer_cpu_base' include/linux/hrtimer.h kernel/time/hrtimer.c || true; \
+              echo "--- eas_plus.c HEAD ---"; \
+              head -n 260 kernel/sched/eas_plus.c || true; \
               echo "--- diff ---"; \
               git diff -- kernel/sched include/linux/sched arch/arm64/configs/achilles6_row_defconfig || true; \
               exit $rc; \
