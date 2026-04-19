@@ -86,7 +86,7 @@ jobs:
           make achilles6_row_defconfig
           
           # Building with professional Kbuild flags as recommended
-          # Finalizing suppressions for GCC 13 compatibility
+          # Adding maybe-uninitialized and address for GCC 13 compatibility
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
@@ -103,7 +103,16 @@ jobs:
               -Wno-error=int-conversion \
               -Wno-error=enum-conversion" \
             KCPPFLAGS="-Wno-error" \
-            Image.gz-dtb
+            Image.gz-dtb || { \
+              rc=$?; \
+              set +e; \
+              echo "Build failed. Diagnostic Deep Dive:"; \
+              echo "Searching for find_best_idle_cpu definitions..."; \
+              grep -rn "find_best_idle_cpu" . || true; \
+              echo "--- kernel/sched/eas_plus.c (Around failure) ---"; \
+              grep -nC 10 "find_best_idle_cpu" kernel/sched/eas_plus.c || true; \
+              exit $rc; \
+            }
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
