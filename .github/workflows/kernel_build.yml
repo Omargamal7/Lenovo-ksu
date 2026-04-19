@@ -74,6 +74,10 @@ jobs:
           grep -q 'extern int find_best_idle_cpu(struct task_struct \*p, bool prefer_idle);' kernel/sched/eas_plus.c || \
           sed -i '/#include .*sched.h.*/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
 
+          # Feature-gate fixes for NOHZ and HRTIMERS
+          echo "CONFIG_NO_HZ_IDLE=y" >> arch/arm64/configs/achilles6_row_defconfig
+          echo "CONFIG_HIGH_RES_TIMERS=y" >> arch/arm64/configs/achilles6_row_defconfig
+
           make achilles6_row_defconfig
 
           # Building with GCC flags per user steering
