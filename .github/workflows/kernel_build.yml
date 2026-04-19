@@ -71,8 +71,8 @@ jobs:
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
           make achilles6_row_defconfig
-          # Building with GCC
-          make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- HOSTCFLAGS="-fcommon" HOSTCXXFLAGS="-fcommon" Image.gz-dtb
+          # Building with GCC and disabling -Werror for legacy source
+          make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- HOSTCFLAGS="-fcommon" HOSTCXXFLAGS="-fcommon" KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-array-bounds -Wno-array-compare" KCPPFLAGS="-Wno-error" Image.gz-dtb
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
