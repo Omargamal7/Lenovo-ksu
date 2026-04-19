@@ -28,18 +28,26 @@ jobs:
       - name: Integrate WildKSU & SUSFS
         run: |
           cd kernel_source
-          # Integrate KSU-Next (WildKSU fork)
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/WildKSU/main/ksu_setup.sh" | bash -s main
           
-          # Integrate SUSFS (Download specific 4.19 patches)
+          # 1. Integrate WildKSU directly
+          git clone --depth=1 https://github.com/WildKernels/WildKSU ksu
+          
+          # 2. Integrate SUSFS (Optional but recommended)
           mkdir -p susfs
-          curl -L -o susfs/susfs_patch.patch https://raw.githubusercontent.com/WildKernels/GKI_KernelSU_SUSFS/main/KernelSU-Next/susfs_patch/0001-susfs-4.19-backport.patch || echo "SUSFS patch download failed, skipping..."
+          # We'll use a safer download for the patch
+          curl -LSs https://raw.githubusercontent.com/WildKernels/GKI_KernelSU_SUSFS/main/KernelSU-Next/susfs_patch/0001-susfs-4.19-backport.patch -o susfs/susfs.patch || echo "SUSFS patch not found"
           
-          # Apply manual hooks for 4.19
-          # This is a critical step for non-GKI kernels
+          # 3. Apply manual hooks for 4.19
+          # This ensures the ksu directory is compiled
           if [ -d "ksu" ]; then
             echo "Integrating KSU into kernel build system..."
-            sed -i '/obj-y += sysctl.o/a obj-y += ksu/' kernel/Makefile
+            # Check if kernel/Makefile exists
+            if [ -f "kernel/Makefile" ]; then
+              sed -i '/obj-y += sysctl.o/a obj-y += ksu/' kernel/Makefile
+            else
+              # Fallback for some MediaTek trees
+              sed -i '/obj-y += sched\//a obj-y += ksu/' Makefile || true
+            fi
           fi
 
       - name: Build Kernel
