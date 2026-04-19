@@ -69,9 +69,13 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-gnu-
           export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           
+          # Fix for missing dtbo_check
+          sed -i 's/dtbo_check//g' Makefile || true
+          sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
+          
           make achilles6_row_defconfig
-          # Building with Clang and LLVM tools
-          make -j$(nproc) CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+          # Building specific target Image.gz-dtb
+          make -j$(nproc) CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip DTC_EXT=dtc Image.gz-dtb
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
