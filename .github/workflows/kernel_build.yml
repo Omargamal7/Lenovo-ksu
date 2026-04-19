@@ -79,7 +79,7 @@ jobs:
           make achilles6_row_defconfig
           
           # Building with professional Kbuild flags as recommended
-          # Removed -w and debug tail to follow user steering
+          # Using safer always-print diagnostic block as per user steering
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
@@ -92,22 +92,18 @@ jobs:
               -Wno-error=stringop-truncation \
               -Wno-error=address-of-packed-member" \
             KCPPFLAGS="-Wno-error" \
-            Image.gz-dtb || ( \
-              echo "Build failed. Diagnostic Deep Dive:" && \
-              grep -Rnw kernel/sched include/linux/sched \
-                -e 'NOHZ_BALANCE_KICK' \
-                -e 'NOHZ_NEWILB_KICK' \
-                -e 'NOHZ_STATS_KICK' \
-                -e 'NOHZ_NEXT_KICK' \
-                -e 'NOHZ_KICK_MASK' && \
-              echo "--- kernel/sched/core.c (Top 160) ---" && \
-              sed -n '1,160p' kernel/sched/core.c && \
-              echo "--- kernel/sched/sched.h (Top 260) ---" && \
-              sed -n '1,260p' kernel/sched/sched.h && \
-              echo "--- include/linux/sched/nohz.h (Top 220) ---" && \
-              sed -n '1,220p' include/linux/sched/nohz.h && \
-              exit 1 \
-            )
+            Image.gz-dtb || { \
+              rc=$?; \
+              set +e; \
+              echo "Build failed. Diagnostic Deep Dive:"; \
+              echo "Searching for NOHZ definitions (enum or define)..."; \
+              grep -Rnw . -e "NOHZ_BALANCE_KICK" | grep -v "test_bit\|clear_bit\|set_bit" || true; \
+              echo "--- kernel/sched/core.c (Around failure) ---"; \
+              grep -nC 10 "NOHZ_BALANCE_KICK" kernel/sched/core.c || true; \
+              echo "--- kernel/sched/sched.h (Looking for nohz_flags) ---"; \
+              grep -nC 20 "nohz_flags" kernel/sched/sched.h || true; \
+              exit $rc; \
+            }
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
