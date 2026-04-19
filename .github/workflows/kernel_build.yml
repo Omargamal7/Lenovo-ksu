@@ -29,8 +29,8 @@ jobs:
         run: |
           cd kernel_source
           
-          # 1. Integrate WildKSU directly
-          git clone --depth=1 https://github.com/WildKernels/WildKSU ksu
+          # 1. Integrate WildKSU-Next directly
+          git clone --depth=1 https://github.com/WildKernels/WildKSU-Next ksu
           
           # 2. Integrate SUSFS (Optional but recommended)
           mkdir -p susfs
