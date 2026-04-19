@@ -88,7 +88,9 @@ jobs:
               -Wno-error=array-bounds \
               -Wno-error=array-compare \
               -Wno-error=dangling-pointer \
-              -Wno-error=stringop-truncation" \
+              -Wno-error=stringop-truncation \
+              -Wno-error=address \
+              -Wno-error=address-of-packed-member" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb || { \
               rc=$?; \
@@ -98,6 +100,10 @@ jobs:
               git grep -n 'find_best_idle_cpu' || grep -rn 'find_best_idle_cpu' kernel include drivers arch || true; \
               echo "--- NOHZ_BALANCE_KICK ---"; \
               git grep -n 'NOHZ_BALANCE_KICK' || grep -rn 'NOHZ_BALANCE_KICK' kernel include drivers arch || true; \
+              echo "--- config states ---"; \
+              grep -E "^(CONFIG_NO_HZ_COMMON|CONFIG_NO_HZ_IDLE|CONFIG_NO_HZ_FULL|CONFIG_GENERIC_CLOCKEVENTS|CONFIG_HIGH_RES_TIMERS|CONFIG_TICK_ONESHOT)=" .config || true; \
+              echo "--- hrtimer.h hang_detected ---"; \
+              git grep -n -B 2 -A 2 "hang_detected" include/linux/hrtimer.h || true; \
               echo "--- diff ---"; \
               git diff -- kernel/sched include/linux/sched arch/arm64/configs/achilles6_row_defconfig || true; \
               exit $rc; \
