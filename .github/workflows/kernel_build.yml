@@ -70,6 +70,10 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
 
+          # Forward declaration to fix implicit declaration error
+          grep -q 'int find_best_idle_cpu(struct task_struct \*p, bool prefer_idle);' kernel/sched/eas_plus.c || \
+          sed -i '/int tiny_thresh;/a int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
+
           # Feature-gate fixes for NOHZ and HRTIMERS
           echo "CONFIG_NO_HZ_IDLE=y" >> arch/arm64/configs/achilles6_row_defconfig
           echo "CONFIG_HIGH_RES_TIMERS=y" >> arch/arm64/configs/achilles6_row_defconfig
