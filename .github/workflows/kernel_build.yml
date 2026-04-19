@@ -70,9 +70,14 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
-          # Surgical fix for known bad spellings in legacy tree
-          # Broadened to catch -Werror=... variants as well
-          find . -name "Makefile" -type f -exec sed -i 's/-Werror/-Wno-error/g' {} +
+          # Surgical fix for bad spellings and forced errors in legacy tree
+          # Translates both old-style hyphenated and modern equals-style flags
+          find . -name "Makefile" -type f -exec sed -E -i \
+            -e 's/-Werror-/-Wno-error=/g' \
+            -e 's/-Werror=/-Wno-error=/g' \
+            -e 's/ -Werror / -Wno-error /g' \
+            -e 's/ -Werror$/ -Wno-error/g' \
+            {} +
           
           # Enable NO_HZ_COMMON and NO_HZ to fix undeclared NOHZ symbols in Mediatek code
           echo "CONFIG_NO_HZ_COMMON=y" >> arch/arm64/configs/achilles6_row_defconfig
