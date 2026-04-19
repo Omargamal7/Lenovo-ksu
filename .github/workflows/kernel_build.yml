@@ -119,10 +119,10 @@ jobs:
               rc=$?; \
               set +e; \
               echo "Build failed. Diagnostic Deep Dive:"; \
-              echo "Searching for find_best_idle_cpu definitions..."; \
-              grep -rn "find_best_idle_cpu" . || true; \
-              echo "--- kernel/sched/eas_plus.c (Around failure) ---"; \
-              grep -nC 10 "find_best_idle_cpu" kernel/sched/eas_plus.c || true; \
+              echo "Searching for hang_detected definition..."; \
+              grep -rn "hang_detected" . || true; \
+              echo "--- include/linux/hrtimer.h (Around struct hrtimer_cpu_base) ---"; \
+              grep -nC 20 "struct hrtimer_cpu_base" include/linux/hrtimer.h || true; \
               exit $rc; \
             }
           
