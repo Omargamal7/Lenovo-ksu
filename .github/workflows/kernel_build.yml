@@ -70,22 +70,8 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
-          # Robust fix for -Werror using Python (Heredoc approach)
-          python3 << 'EOF'
-import os, re
-print("Starting Makefile cleaning...")
-for root, dirs, files in os.walk('.'):
-    for file in files:
-        if file == 'Makefile' or file.endswith('.mk'):
-            path = os.path.join(root, file)
-            with open(path, 'r', errors='ignore') as f:
-                content = f.read()
-            new_content = re.sub(r'-Werror[^\s)]*', '', content)
-            if content != new_content:
-                print(f"Cleaning {path}")
-                with open(path, 'w') as f:
-                    f.write(new_content)
-EOF
+          # Robust fix for -Werror using external Python script
+          python3 ../ksu/clean_makefiles.py
           
           make achilles6_row_defconfig
           # Building with GCC and minimal stable suppression flags
