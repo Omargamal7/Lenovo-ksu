@@ -79,12 +79,11 @@ jobs:
           make achilles6_row_defconfig
           
           # Building with professional Kbuild flags as recommended
-          # Adding -w to suppress all warnings and focus on REAL errors
-          # Search for NOHZ_BALANCE_KICK and forced -Werror
+          # Removed -w and debug tail to follow user steering
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
-            KCFLAGS="-w -Wno-error \
+            KCFLAGS="-Wno-error \
               -Wno-error=implicit-function-declaration \
               -Wno-error=implicit-int \
               -Wno-error=array-bounds \
@@ -93,7 +92,22 @@ jobs:
               -Wno-error=stringop-truncation \
               -Wno-error=address-of-packed-member" \
             KCPPFLAGS="-Wno-error" \
-            Image.gz-dtb || (echo "Compilation failed. Hunting for NOHZ_BALANCE_KICK..." && grep -r "NOHZ_BALANCE_KICK" . | head -n 20 && echo "Hunting for forced -Werror..." && grep -r "\-Werror" . --include="Makefile" --include="*.mk" | grep -v "Wno-error" | head -n 20 && exit 1)
+            Image.gz-dtb || ( \
+              echo "Build failed. Diagnostic Deep Dive:" && \
+              grep -Rnw kernel/sched include/linux/sched \
+                -e 'NOHZ_BALANCE_KICK' \
+                -e 'NOHZ_NEWILB_KICK' \
+                -e 'NOHZ_STATS_KICK' \
+                -e 'NOHZ_NEXT_KICK' \
+                -e 'NOHZ_KICK_MASK' && \
+              echo "--- kernel/sched/core.c (Top 160) ---" && \
+              sed -n '1,160p' kernel/sched/core.c && \
+              echo "--- kernel/sched/sched.h (Top 260) ---" && \
+              sed -n '1,260p' kernel/sched/sched.h && \
+              echo "--- include/linux/sched/nohz.h (Top 220) ---" && \
+              sed -n '1,220p' include/linux/sched/nohz.h && \
+              exit 1 \
+            )
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
