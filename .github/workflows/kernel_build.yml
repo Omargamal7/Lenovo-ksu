@@ -83,8 +83,7 @@ jobs:
           make achilles6_row_defconfig
           
           # Building with professional Kbuild flags as recommended
-          # Using safer always-print diagnostic block as per user steering
-          # Adding maybe-uninitialized and address for GCC 13 compatibility
+          # Finalizing suppressions for GCC 13 compatibility
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
@@ -98,20 +97,10 @@ jobs:
               -Wno-error=address-of-packed-member \
               -Wno-error=maybe-uninitialized \
               -Wno-error=address \
-              -Wno-error=int-conversion" \
+              -Wno-error=int-conversion \
+              -Wno-error=enum-conversion" \
             KCPPFLAGS="-Wno-error" \
-            Image.gz-dtb || { \
-              rc=$?; \
-              set +e; \
-              echo "Build failed. Diagnostic Deep Dive:"; \
-              echo "Searching for NOHZ definitions (enum or define)..."; \
-              grep -Rnw . -e "NOHZ_BALANCE_KICK" | grep -v "test_bit\|clear_bit\|set_bit" || true; \
-              echo "--- kernel/sched/core.c (Around failure) ---"; \
-              grep -nC 10 "NOHZ_BALANCE_KICK" kernel/sched/core.c || true; \
-              echo "--- kernel/sched/sched.h (Looking for nohz_flags) ---"; \
-              grep -nC 20 "nohz_flags" kernel/sched/sched.h || true; \
-              exit $rc; \
-            }
+            Image.gz-dtb
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
