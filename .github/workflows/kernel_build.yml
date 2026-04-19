@@ -16,10 +16,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang-15 lld-15 llvm-15 libncurses-dev
-          # Using Clang-15 as it is more stable for 4.19 kernels
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100
-          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-15 100
+          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi libncurses-dev
 
       - name: Download Kernel Source
         run: |
@@ -74,8 +71,8 @@ jobs:
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
           make achilles6_row_defconfig
-          # Building specific target Image.gz-dtb with -fcommon fix
-          make -j$(nproc) CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip DTC_EXT=dtc HOSTCFLAGS="-fcommon" HOSTCXXFLAGS="-fcommon" Image.gz-dtb
+          # Building with GCC
+          make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- HOSTCFLAGS="-fcommon" HOSTCXXFLAGS="-fcommon" Image.gz-dtb
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
