@@ -79,6 +79,10 @@ jobs:
             -e 's/ -Werror$/ -Wno-error/g' \
             {} +
           
+          # Unify find_best_idle_cpu signature to resolve conflicting types error
+          sed -i 's/int find_best_idle_cpu(struct task_struct \*p, bool prefer_idle)/int find_best_idle_cpu(struct task_struct \*p, int prefer_idle)/g' kernel/sched/sched.h || true
+          sed -i 's/int find_best_idle_cpu(struct task_struct \*p, bool prefer_idle)/int find_best_idle_cpu(struct task_struct \*p, int prefer_idle)/g' kernel/sched/eas_plus.c || true
+          
           # Enable NO_HZ_COMMON and NO_HZ to fix undeclared NOHZ symbols in Mediatek code
           echo "CONFIG_NO_HZ_COMMON=y" >> arch/arm64/configs/achilles6_row_defconfig
           echo "CONFIG_NO_HZ=y" >> arch/arm64/configs/achilles6_row_defconfig
