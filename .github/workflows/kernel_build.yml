@@ -16,12 +16,10 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang lld llvm libncurses-dev
-          # Install AOSP Clang for better KSU compatibility
-          mkdir -p $GITHUB_WORKSPACE/toolchain
-          cd $GITHUB_WORKSPACE/toolchain
-          curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r416183b1.tar.gz
-          tar -xf clang-r416183b1.tar.gz
+          sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev clang-15 lld-15 llvm-15 libncurses-dev
+          # Using Clang-15 as it is more stable for 4.19 kernels
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-15 100
+          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-15 100
 
       - name: Download Kernel Source
         run: |
@@ -35,29 +33,33 @@ jobs:
           
           # Integrate SUSFS (Download specific 4.19 patches)
           mkdir -p susfs
-          curl -L -o susfs/susfs_patch.patch https://raw.githubusercontent.com/WildKernels/GKI_KernelSU_SUSFS/main/KernelSU-Next/susfs_patch/0001-susfs-4.19-backport.patch || true
-          # Note: If the patch above fails, we use a generic 4.19 backport
+          curl -L -o susfs/susfs_patch.patch https://raw.githubusercontent.com/WildKernels/GKI_KernelSU_SUSFS/main/KernelSU-Next/susfs_patch/0001-susfs-4.19-backport.patch || echo "SUSFS patch download failed, skipping..."
           
           # Apply manual hooks for 4.19
           # This is a critical step for non-GKI kernels
-          sed -i '/obj-y += sysctl.o/a obj-y += ksu/' kernel/Makefile
+          if [ -d "ksu" ]; then
+            echo "Integrating KSU into kernel build system..."
+            sed -i '/obj-y += sysctl.o/a obj-y += ksu/' kernel/Makefile
+          fi
 
       - name: Build Kernel
         run: |
           cd kernel_source
-          export PATH=$GITHUB_WORKSPACE/toolchain/bin:$PATH
           export ARCH=arm64
           export SUBARCH=arm64
           export CROSS_COMPILE=aarch64-linux-gnu-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export CROSS_COMPILE_ARM32=arm-linux-gnueabi-
           
           make achilles6_row_defconfig
+          # Building with Clang and LLVM tools
           make -j$(nproc) CC=clang LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
           elif [ -f arch/arm64/boot/Image.gz ]; then
             cp arch/arm64/boot/Image.gz ../Image.gz
+          elif [ -f arch/arm64/boot/Image ]; then
+             cp arch/arm64/boot/Image ../Image
           fi
 
       - name: Repack Boot Image
