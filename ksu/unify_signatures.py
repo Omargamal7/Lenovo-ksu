@@ -1,12 +1,12 @@
 import os
 import re
 
-print("Starting flexible signature unification...")
+print("Starting nuclear signature unification...")
 
-# Flexible regex to match find_best_idle_cpu regardless of parameter names or 'extern'
-# Targets: int find_best_idle_cpu(struct task_struct [*{name}], bool [name])
-pattern = re.compile(r'(int\s+find_best_idle_cpu\s*\(\s*struct\s+task_struct\s*\*\s*\w*\s*,\s*)bool(\s*\w*\s*\))')
-replacement = r'\1int\2'
+# Nuclear regex to match find_best_idle_cpu followed by ANYTHING in parentheses
+# This targets any variation of: int find_best_idle_cpu(...)
+pattern = re.compile(r'int\s+find_best_idle_cpu\s*\([^)]*\)')
+replacement = 'int find_best_idle_cpu(struct task_struct *p, int prefer_idle)'
 
 for root, dirs, files in os.walk('.'):
     for file in files:
@@ -19,10 +19,10 @@ for root, dirs, files in os.walk('.'):
                 new_content = pattern.sub(replacement, content)
                 
                 if content != new_content:
-                    print(f"Unified signature in {path}")
+                    print(f"Nuclear unified signature in {path}")
                     with open(path, 'w') as f:
                         f.write(new_content)
             except Exception as e:
                 print(f"Error processing {path}: {e}")
 
-print("Flexible signature unification finished.")
+print("Nuclear signature unification finished.")
