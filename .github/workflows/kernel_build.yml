@@ -78,7 +78,7 @@ jobs:
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
-            KCFLAGS="-Wno-error -Wno-implicit-function-declaration -Wno-array-bounds -Wno-array-compare -Wno-dangling-pointer -Wno-stringop-truncation -Wno-address-of-packed-member -Wno-implicit-int" \
+            KCFLAGS="-Wno-error -Wno-error=implicit-function-declaration -Wno-error=array-bounds -Wno-error=array-compare -Wno-error=dangling-pointer -Wno-error=stringop-truncation -Wno-error=address-of-packed-member -Wno-error=implicit-int" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb
           
