@@ -70,59 +70,28 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
-          # Surgical fix for bad spellings and forced errors in legacy tree
-          # Translates both old-style hyphenated and modern equals-style flags
-          find . -name "Makefile" -type f -exec sed -E -i \
-            -e 's/-Werror-/-Wno-error=/g' \
-            -e 's/-Werror=/-Wno-error=/g' \
-            -e 's/ -Werror / -Wno-error /g' \
-            -e 's/ -Werror$/ -Wno-error/g' \
-            {} +
-          
-          # Unify find_best_idle_cpu signature using external Python script
-          python3 ../ksu/unify_signatures.py
-
-          # Enable NO_HZ_COMMON and NO_HZ to fix undeclared NOHZ symbols in Mediatek code
-          echo "CONFIG_NO_HZ_COMMON=y" >> arch/arm64/configs/achilles6_row_defconfig
-          echo "CONFIG_NO_HZ=y" >> arch/arm64/configs/achilles6_row_defconfig
-
-          # Enable RT_GROUP_SCHED and CGROUP_SCHED to fix missing members in rt_rq and sched_rt_entity
-          echo "CONFIG_RT_GROUP_SCHED=y" >> arch/arm64/configs/achilles6_row_defconfig
-          echo "CONFIG_CGROUP_SCHED=y" >> arch/arm64/configs/achilles6_row_defconfig
-          echo "CONFIG_CGROUPS=y" >> arch/arm64/configs/achilles6_row_defconfig
-
-          # Enable SCHED_DEBUG to fix hang_detected in hrtimer
-          echo "CONFIG_SCHED_DEBUG=y" >> arch/arm64/configs/achilles6_row_defconfig
-
           make achilles6_row_defconfig
 
-          
-          # Building with professional Kbuild flags as recommended
-          # Adding maybe-uninitialized and address for GCC 13 compatibility
+          # Building with GCC flags per user steering
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
             KCFLAGS="-Wno-error \
               -Wno-error=implicit-function-declaration \
               -Wno-error=implicit-int \
-              -Wno-error=array-bounds \
-              -Wno-error=array-compare \
-              -Wno-error=dangling-pointer \
-              -Wno-error=stringop-truncation \
-              -Wno-error=address-of-packed-member \
-              -Wno-error=maybe-uninitialized \
-              -Wno-error=address \
-              -Wno-error=int-conversion \
-              -Wno-error=enum-conversion" \
+              -Wno-error=incompatible-pointer-types \
+              -Wno-error=int-conversion" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb || { \
               rc=$?; \
               set +e; \
               echo "Build failed. Diagnostic Deep Dive:"; \
-              echo "Searching for hang_detected definition..."; \
-              grep -rn "hang_detected" . || true; \
-              echo "--- include/linux/hrtimer.h (Around struct hrtimer_cpu_base) ---"; \
-              grep -nC 20 "struct hrtimer_cpu_base" include/linux/hrtimer.h || true; \
+              echo "--- find_best_idle_cpu ---"; \
+              git grep -n 'find_best_idle_cpu' || grep -rn 'find_best_idle_cpu' kernel include drivers arch || true; \
+              echo "--- NOHZ_BALANCE_KICK ---"; \
+              git grep -n 'NOHZ_BALANCE_KICK' || grep -rn 'NOHZ_BALANCE_KICK' kernel include drivers arch || true; \
+              echo "--- diff ---"; \
+              git diff -- kernel/sched include/linux/sched arch/arm64/configs/achilles6_row_defconfig || true; \
               exit $rc; \
             }
           
