@@ -1,12 +1,12 @@
 import os
 import re
 
-print("Starting signature unification...")
+print("Starting flexible signature unification...")
 
-# Broad regex to match the signature regardless of spacing, 'extern' keyword, or variable names
-# This targets: [extern] int find_best_idle_cpu(struct task_struct *p, bool prefer_idle)
-pattern = re.compile(r'(extern\s+)?int\s+find_best_idle_cpu\s*\(\s*struct\s+task_struct\s*\*\s*\w+\s*,\s*bool\s+prefer_idle\s*\)')
-replacement = r'\1int find_best_idle_cpu(struct task_struct *p, int prefer_idle)'
+# Flexible regex to match find_best_idle_cpu regardless of parameter names or 'extern'
+# Targets: int find_best_idle_cpu(struct task_struct [*{name}], bool [name])
+pattern = re.compile(r'(int\s+find_best_idle_cpu\s*\(\s*struct\s+task_struct\s*\*\s*\w*\s*,\s*)bool(\s*\w*\s*\))')
+replacement = r'\1int\2'
 
 for root, dirs, files in os.walk('.'):
     for file in files:
@@ -25,4 +25,4 @@ for root, dirs, files in os.walk('.'):
             except Exception as e:
                 print(f"Error processing {path}: {e}")
 
-print("Signature unification finished.")
+print("Flexible signature unification finished.")
