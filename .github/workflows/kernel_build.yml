@@ -2,6 +2,9 @@ name: Build Kernel with WildKSU & SUSFS
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'ksu/trigger_kernel_build'
 
 jobs:
   build:
