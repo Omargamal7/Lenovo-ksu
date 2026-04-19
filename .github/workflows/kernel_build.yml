@@ -70,15 +70,15 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
-          # Nuclear fix for -Werror in legacy source (Safe replacement)
-          find . -name "Makefile" -type f -exec sed -i 's/-Werror/-Wno-error/g' {} +
+          # Nuclear fix for -Werror in legacy source (Simple deletion)
+          find . -name "Makefile" -type f -exec sed -i 's/-Werror//g' {} +
           
           make achilles6_row_defconfig
-          # Building with GCC and aggressive warning suppression
+          # Building with GCC and basic standard suppression flags
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
-            HOSTCFLAGS="-fcommon -Wno-error" \
-            HOSTCXXFLAGS="-fcommon -Wno-error" \
-            KCFLAGS="-Wno-error -Wno-error=implicit-function-declaration -Wno-error=array-bounds -Wno-error=array-compare -Wno-error=dangling-pointer -Wno-error=stringop-truncation -Wno-error=address-of-packed-member -Wno-error=implicit-int" \
+            HOSTCFLAGS="-fcommon" \
+            HOSTCXXFLAGS="-fcommon" \
+            KCFLAGS="-Wno-implicit-function-declaration -Wno-implicit-int -Wno-error" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb
           
