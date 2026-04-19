@@ -79,10 +79,11 @@ jobs:
           make achilles6_row_defconfig
           
           # Building with professional Kbuild flags as recommended
+          # Adding -w to suppress all warnings and focus on REAL errors
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
-            KCFLAGS="-Wno-error \
+            KCFLAGS="-w -Wno-error \
               -Wno-error=implicit-function-declaration \
               -Wno-error=implicit-int \
               -Wno-error=array-bounds \
@@ -91,7 +92,7 @@ jobs:
               -Wno-error=stringop-truncation \
               -Wno-error=address-of-packed-member" \
             KCPPFLAGS="-Wno-error" \
-            Image.gz-dtb
+            Image.gz-dtb || (echo "Compilation failed, inspecting source..." && grep -C 5 "NOHZ_BALANCE_KICK" kernel/sched/core.c && exit 1)
           
           if [ -f arch/arm64/boot/Image.gz-dtb ]; then
             cp arch/arm64/boot/Image.gz-dtb ../Image.gz-dtb
