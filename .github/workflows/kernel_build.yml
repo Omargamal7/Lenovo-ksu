@@ -76,10 +76,15 @@ jobs:
             -e 's/-Werror-implicit-int/-Wno-error=implicit-int/g' \
             {} +
           
+          # Enable NO_HZ_COMMON and NO_HZ to fix undeclared NOHZ symbols in Mediatek code
+          echo "CONFIG_NO_HZ_COMMON=y" >> arch/arm64/configs/achilles6_row_defconfig
+          echo "CONFIG_NO_HZ=y" >> arch/arm64/configs/achilles6_row_defconfig
+          
           make achilles6_row_defconfig
           
           # Building with professional Kbuild flags as recommended
           # Using safer always-print diagnostic block as per user steering
+          # Adding maybe-uninitialized and address for GCC 13 compatibility
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
             HOSTCFLAGS="-fcommon -Wno-error" \
             HOSTCXXFLAGS="-fcommon -Wno-error" \
@@ -90,7 +95,10 @@ jobs:
               -Wno-error=array-compare \
               -Wno-error=dangling-pointer \
               -Wno-error=stringop-truncation \
-              -Wno-error=address-of-packed-member" \
+              -Wno-error=address-of-packed-member \
+              -Wno-error=maybe-uninitialized \
+              -Wno-error=address \
+              -Wno-error=int-conversion" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb || { \
               rc=$?; \
