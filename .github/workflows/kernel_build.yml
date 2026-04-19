@@ -83,11 +83,19 @@ jobs:
           python3 ../ksu/unify_signatures.py
 
           # Enable NO_HZ_COMMON and NO_HZ to fix undeclared NOHZ symbols in Mediatek code
-
           echo "CONFIG_NO_HZ_COMMON=y" >> arch/arm64/configs/achilles6_row_defconfig
           echo "CONFIG_NO_HZ=y" >> arch/arm64/configs/achilles6_row_defconfig
-          
+
+          # Enable RT_GROUP_SCHED and CGROUP_SCHED to fix missing members in rt_rq and sched_rt_entity
+          echo "CONFIG_RT_GROUP_SCHED=y" >> arch/arm64/configs/achilles6_row_defconfig
+          echo "CONFIG_CGROUP_SCHED=y" >> arch/arm64/configs/achilles6_row_defconfig
+          echo "CONFIG_CGROUPS=y" >> arch/arm64/configs/achilles6_row_defconfig
+
+          # Enable SCHED_DEBUG to fix hang_detected in hrtimer
+          echo "CONFIG_SCHED_DEBUG=y" >> arch/arm64/configs/achilles6_row_defconfig
+
           make achilles6_row_defconfig
+
           
           # Building with professional Kbuild flags as recommended
           # Adding maybe-uninitialized and address for GCC 13 compatibility
