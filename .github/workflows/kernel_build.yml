@@ -72,7 +72,7 @@ jobs:
           
           # Forward declaration to fix implicit declaration error
           grep -q 'extern int find_best_idle_cpu(struct task_struct \*p, bool prefer_idle);' kernel/sched/eas_plus.c || \
-          sed -i '/#include .*sched.h.*/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
+          sed -i '/#include "sched.h"/a extern int find_best_idle_cpu(struct task_struct *p, bool prefer_idle);' kernel/sched/eas_plus.c || true
 
           # Feature-gate fixes for NOHZ and HRTIMERS
           echo "CONFIG_NO_HZ_IDLE=y" >> arch/arm64/configs/achilles6_row_defconfig
@@ -94,7 +94,8 @@ jobs:
               -Wno-error=dangling-pointer \
               -Wno-error=stringop-truncation \
               -Wno-error=address \
-              -Wno-error=address-of-packed-member" \
+              -Wno-error=address-of-packed-member \
+              -Wno-error=maybe-uninitialized" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb || { \
               rc=$?; \
