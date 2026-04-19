@@ -70,15 +70,26 @@ jobs:
           sed -i 's/dtbo_check//g' Makefile || true
           sed -i 's/dtbo_check//g' arch/arm64/Makefile || true
           
-          # Robust fix for -Werror using external Python script
-          python3 ../ksu/clean_makefiles.py
+          # Surgical fix for known bad spellings in legacy tree
+          find . -name "Makefile" -type f -exec sed -E -i \
+            -e 's/-Werror-implicit-function-declaration/-Wno-error=implicit-function-declaration/g' \
+            -e 's/-Werror-implicit-int/-Wno-error=implicit-int/g' \
+            {} +
           
           make achilles6_row_defconfig
-          # Building with GCC and minimal stable suppression flags
+          
+          # Building with professional Kbuild flags as recommended
           make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- \
-            HOSTCFLAGS="-fcommon" \
-            HOSTCXXFLAGS="-fcommon" \
-            KCFLAGS="-Wno-error" \
+            HOSTCFLAGS="-fcommon -Wno-error" \
+            HOSTCXXFLAGS="-fcommon -Wno-error" \
+            KCFLAGS="-Wno-error \
+              -Wno-error=implicit-function-declaration \
+              -Wno-error=implicit-int \
+              -Wno-error=array-bounds \
+              -Wno-error=array-compare \
+              -Wno-error=dangling-pointer \
+              -Wno-error=stringop-truncation \
+              -Wno-error=address-of-packed-member" \
             KCPPFLAGS="-Wno-error" \
             Image.gz-dtb
           
