@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<flashtool-config version="2.0">
+    <general>
+        <chip-name>MT6765</chip-name>
+        <storage-type>EMMC</storage-type>
+        <download-agent>RECOVERY_FILE_DIR\MTK_AllInOne_DA_6765.bin</download-agent>
+        <scatter>RECOVERY_FILE_DIR\MT6765_Android_scatter.txt</scatter>
+        <authentication>RECOVERY_FILE_DIR\auth_sv5.auth</authentication>
+        <certification></certification>
+        <rom-list>
+            <rom index="0" enable="true">RECOVERY_FILE_DIR\preloader_achilles6_row_data.bin</rom>
+            <rom index="3" enable="true">RECOVERY_FILE_DIR\recovery.img</rom>
+            <rom index="14" enable="true">RECOVERY_FILE_DIR\vbmeta.img</rom>
+            <rom index="15" enable="true">RECOVERY_FILE_DIR\logo-verified.bin</rom>
+            <rom index="18" enable="true">RECOVERY_FILE_DIR\md1img-verified.img</rom>
+            <rom index="19" enable="true">RECOVERY_FILE_DIR\spmfw-verified.img</rom>
+            <rom index="20" enable="true">RECOVERY_FILE_DIR\scp-verified.img</rom>
+            <rom index="21" enable="true">RECOVERY_FILE_DIR\scp-verified.img</rom>
+            <rom index="22" enable="true">RECOVERY_FILE_DIR\sspm-verified.img</rom>
+            <rom index="23" enable="true">RECOVERY_FILE_DIR\sspm-verified.img</rom>
+            <rom index="27" enable="true">RECOVERY_FILE_DIR\lk-verified.img</rom>
+            <rom index="28" enable="true">RECOVERY_FILE_DIR\lk-verified.img</rom>
+            <rom index="29" enable="true">RECOVERY_FILE_DIR\boot.img</rom>
+            <rom index="30" enable="true">RECOVERY_FILE_DIR\dtbo-verified.img</rom>
+            <rom index="31" enable="true">RECOVERY_FILE_DIR\tee-verified.img</rom>
+            <rom index="32" enable="true">RECOVERY_FILE_DIR\tee-verified.img</rom>
+            <rom index="33" enable="true">RECOVERY_FILE_DIR\cache.img</rom>
+            <rom index="34" enable="true">RECOVERY_FILE_DIR\lenovocust.img</rom>
+            <rom index="37" enable="true">RECOVERY_FILE_DIR\vendor.img</rom>
+            <rom index="38" enable="true">RECOVERY_FILE_DIR\system.img</rom>
+            <rom index="39" enable="true">RECOVERY_FILE_DIR\userdata.img</rom>
+        </rom-list>
+        <connection type="BromUSB" high-speed="true" power="AutoDetect" da_log_level="Info" da_log_channel="UART" timeout-count="3600000" com-port="" storage_life_cycle_check="true" />
+        <checksum-level>none</checksum-level>
+        <!--log_on: log switch, enable log if true, otherwise false;
+			log_path: the directory in which the log files has been stored;
+			clean_hours: the time setting to delete log files regularly, the unit is hours.-->
+        <log-info log_on="true" log_path="C:\ProgramData\SP_FT_Logs" clean_hours="720" />
+    </general>
+    <commands>
+        <download-only>
+            <da-download-all />
+        </download-only>
+    </commands>
+</flashtool-config>
